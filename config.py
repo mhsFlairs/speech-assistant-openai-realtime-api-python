@@ -38,6 +38,14 @@ VAD_THRESHOLD = float(os.getenv('VAD_THRESHOLD', 0.5))  # 0.0-1.0, sensitivity f
 VAD_PREFIX_PADDING_MS = int(os.getenv('VAD_PREFIX_PADDING_MS', 300))  # Audio to include before speech
 VAD_SILENCE_DURATION_MS = int(os.getenv('VAD_SILENCE_DURATION_MS', 200))  # Silence before end-of-turn (lower = more responsive)
 
+# Qdrant RAG Configuration
+RAG_ENABLED = os.getenv('RAG_ENABLED', 'True').lower() == 'true'
+QDRANT_URL = os.getenv('QDRANT_URL', 'https://717e8597-d379-4a3f-8761-55b68f3b3aac.us-east-1-0.aws.cloud.qdrant.io')
+QDRANT_API_KEY = os.getenv('QDRANT_API_KEY', '')
+QDRANT_COLLECTION = os.getenv('QDRANT_COLLECTION', 'staging-aimy-knowlede-documents')
+RAG_TOP_K = int(os.getenv('RAG_TOP_K', 3))  # Number of documents to retrieve
+LITELLM_API_KEY = os.getenv('LITELLM_API_KEY', '')  # Uses OPENAI_API_KEY if not set
+
 # Logging Configuration
 LOG_EVENT_TYPES = [
     'error', 'response.content.done', 'rate_limits.updated',

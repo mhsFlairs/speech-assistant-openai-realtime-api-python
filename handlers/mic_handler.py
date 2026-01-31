@@ -8,8 +8,8 @@ from typing import Optional
 from fastapi import APIRouter, WebSocket
 from fastapi.websockets import WebSocketDisconnect
 
-from config import AUDIO_FORMAT_PCM16
-from clients import OpenAIRealtimeClient
+from config import AUDIO_FORMAT_PCM16, RAG_ENABLED
+from clients import OpenAIRealtimeClient, QdrantRAGClient
 
 router = APIRouter()
 
@@ -38,7 +38,16 @@ async def handle_mic_stream(websocket: WebSocket):
 
     state = MicStreamState()
 
-    async with OpenAIRealtimeClient(audio_format=AUDIO_FORMAT_PCM16) as openai_client:
+    # Initialize Qdrant RAG client if enabled
+    qdrant_client = None
+    if RAG_ENABLED:
+        try:
+            qdrant_client = QdrantRAGClient()
+            print("Qdrant RAG client initialized")
+        except Exception as e:
+            print(f"Failed to initialize Qdrant RAG client: {e}")
+
+    async with OpenAIRealtimeClient(audio_format=AUDIO_FORMAT_PCM16, qdrant_client=qdrant_client) as openai_client:
 
         async def receive_from_client():
             """Receive audio data from the browser client and send it to OpenAI."""

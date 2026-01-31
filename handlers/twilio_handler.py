@@ -9,8 +9,8 @@ from fastapi.websockets import WebSocketDisconnect
 from twilio.twiml.voice_response import VoiceResponse, Connect
 from typing import Optional
 
-from config import SHOW_TIMING_MATH, AUDIO_FORMAT_TWILIO
-from clients import OpenAIRealtimeClient
+from config import SHOW_TIMING_MATH, AUDIO_FORMAT_TWILIO, RAG_ENABLED
+from clients import OpenAIRealtimeClient, QdrantRAGClient
 
 router = APIRouter()
 
@@ -41,7 +41,16 @@ async def handle_media_stream(websocket: WebSocket):
     print("Twilio client connected")
     await websocket.accept()
 
-    async with OpenAIRealtimeClient(audio_format=AUDIO_FORMAT_TWILIO) as openai_client:
+    # Initialize Qdrant RAG client if enabled
+    qdrant_client = None
+    if RAG_ENABLED:
+        try:
+            qdrant_client = QdrantRAGClient()
+            print("Qdrant RAG client initialized")
+        except Exception as e:
+            print(f"Failed to initialize Qdrant RAG client: {e}")
+
+    async with OpenAIRealtimeClient(audio_format=AUDIO_FORMAT_TWILIO, qdrant_client=qdrant_client) as openai_client:
         # Connection specific state
         state = TwilioStreamState()
 

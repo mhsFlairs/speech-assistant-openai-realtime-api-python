@@ -4,7 +4,7 @@ OpenAI Realtime API client with async context manager support.
 import json
 import websockets
 from websockets import ClientConnection
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Optional, TYPE_CHECKING
 
 from config import (
     OPENAI_API_KEY,
@@ -17,7 +17,11 @@ from config import (
     VAD_THRESHOLD,
     VAD_PREFIX_PADDING_MS,
     VAD_SILENCE_DURATION_MS,
+    RAG_ENABLED,
 )
+
+if TYPE_CHECKING:
+    from .qdrant_client import QdrantRAGClient
 
 
 class OpenAIRealtimeClient:
@@ -31,14 +35,16 @@ class OpenAIRealtimeClient:
                 handle_event(event)
     """
 
-    def __init__(self, audio_format: str = "audio/pcmu"):
+    def __init__(self, audio_format: str = "audio/pcmu", qdrant_client: Optional["QdrantRAGClient"] = None):
         """
         Initialize the client.
 
         Args:
             audio_format: Audio format to use ("audio/pcmu" for Twilio, "audio/pcm16" for browser)
+            qdrant_client: Optional QdrantRAGClient for RAG functionality
         """
         self.audio_format = audio_format
+        self.qdrant_client = qdrant_client if RAG_ENABLED else None
         self._ws: Optional[ClientConnection] = None
         self._url = f"{OPENAI_REALTIME_URL}?model={OPENAI_MODEL}&temperature={TEMPERATURE}"
 
@@ -92,6 +98,13 @@ class OpenAIRealtimeClient:
                 "instructions": SYSTEM_MESSAGE,
             }
         }
+        
+        # Enable input audio transcription for RAG if enabled
+        if RAG_ENABLED:
+            session_update["session"]["input_audio_transcription"] = {
+                "model": "gpt-4o-transcribe"
+            }
+        
         print('Sending session update:', json.dumps(session_update))
         await self._ws.send(json.dumps(session_update))
 
@@ -163,6 +176,40 @@ class OpenAIRealtimeClient:
         await self._ws.send(json.dumps(initial_conversation_item))
         await self._ws.send(json.dumps({"type": "response.create"}))
 
+    async def _inject_rag_context(self, user_query: str):
+        """
+        Retrieve RAG context and inject it as a system message.
+        
+        Args:
+            user_query: The transcribed user question
+        """
+        if not self.qdrant_client or not self.is_open or self._ws is None:
+            return
+        
+        try:
+            # Get relevant context from Qdrant
+            context = await self.qdrant_client.get_relevant_context(user_query)
+            
+            if context:
+                # Inject context as a system message
+                context_message = {
+                    "type": "conversation.item.create",
+                    "item": {
+                        "type": "message",
+                        "role": "system",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": f"Use the following knowledge to answer the user's question. Do not mention sources or articles unless specifically asked:\n\n{context}"
+                            }
+                        ]
+                    }
+                }
+                await self._ws.send(json.dumps(context_message))
+                print(f"Injected RAG context for query: {user_query[:100]}...")
+        except Exception as e:
+            print(f"Error injecting RAG context: {e}")
+
     async def iter_events(self) -> AsyncIterator[dict]:
         """
         Iterate over events received from OpenAI.
@@ -179,6 +226,12 @@ class OpenAIRealtimeClient:
             # Log configured event types
             if event.get('type') in LOG_EVENT_TYPES:
                 print(f"Received event: {event['type']}", event)
+
+            # Handle transcription completion for RAG
+            if RAG_ENABLED and event.get('type') == 'conversation.item.input_audio_transcription.completed':
+                transcript = event.get('transcript', '')
+                if transcript:
+                    await self._inject_rag_context(transcript)
 
             yield event
 
