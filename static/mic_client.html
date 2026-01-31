@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Microphone Client - Speech Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 500px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .status {
+            background: #f5f5f5;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+            animation: pulse 2s infinite;
+        }
+
+        .status-indicator.disconnected {
+            background-color: #e74c3c;
+        }
+
+        .status-indicator.connected {
+            background-color: #2ecc71;
+        }
+
+        .status-indicator.connecting {
+            background-color: #f39c12;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:active:not(:disabled) {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.danger {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+        }
+
+        button.danger:hover:not(:disabled) {
+            box-shadow: 0 5px 15px rgba(231, 76, 60, 0.4);
+        }
+
+        .log-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .log-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+
+        .log-entry {
+            font-size: 12px;
+            color: #666;
+            padding: 5px;
+            border-left: 3px solid #ddd;
+            padding-left: 10px;
+            margin-bottom: 5px;
+            font-family: 'Courier New', monospace;
+        }
+
+        .log-entry.info {
+            border-left-color: #3498db;
+        }
+
+        .log-entry.success {
+            border-left-color: #2ecc71;
+        }
+
+        .log-entry.error {
+            border-left-color: #e74c3c;
+        }
+
+        .log-entry.warning {
+            border-left-color: #f39c12;
+        }
+
+        .audio-visualizer {
+            height: 60px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .audio-bars {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            height: 100%;
+        }
+
+        .audio-bar {
+            width: 4px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+            transition: height 0.1s ease;
+        }
+
+        .back-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+
+        .back-link a {
+            color: #667eea;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .back-link a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ Microphone Client</h1>
+        <p class="subtitle">OpenAI Realtime API Voice Assistant</p>
+
+        <div class="status">
+            <span class="status-indicator disconnected" id="statusIndicator"></span>
+            <span id="statusText">Disconnected</span>
+        </div>
+
+        <div class="audio-visualizer" id="visualizer">
+            <div class="audio-bars" id="audioBars">
+                <div class="audio-bar" style="height: 20px;"></div>
+                <div class="audio-bar" style="height: 30px;"></div>
+                <div class="audio-bar" style="height: 25px;"></div>
+                <div class="audio-bar" style="height: 35px;"></div>
+                <div class="audio-bar" style="height: 20px;"></div>
+                <div class="audio-bar" style="height: 30px;"></div>
+                <div class="audio-bar" style="height: 25px;"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled class="danger">Disconnect</button>
+        </div>
+
+        <div class="log-container">
+            <div class="log-title">Activity Log</div>
+            <div id="log"></div>
+        </div>
+
+        <div class="back-link">
+            <a href="/">← Back to Home</a>
+        </div>
+    </div>
+
+    <script>
+        let websocket = null;
+        let audioContext = null;
+        let audioWorkletNode = null;
+        let mediaStream = null;
+        let playbackQueue = [];
+        let isPlaying = false;
+        let audioBufferQueue = [];
+        
+        // Audio scheduling variables for interruption handling
+        let nextPlayTime = 0;
+        let responseStartTime = null;
+        let currentItemId = null;
+        let activeSourceNodes = [];
+
+        const SAMPLE_RATE = 24000;
+        const CHUNK_SIZE = 480; // 20ms at 24kHz
+
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            const timestamp = new Date().toLocaleTimeString();
+            entry.textContent = `[${timestamp}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function updateStatus(status, text) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            indicator.className = `status-indicator ${status}`;
+            statusText.textContent = text;
+        }
+
+        function updateVisualizer(dataArray) {
+            const bars = document.querySelectorAll('.audio-bar');
+            const barCount = bars.length;
+            
+            if (dataArray) {
+                const step = Math.floor(dataArray.length / barCount);
+                bars.forEach((bar, index) => {
+                    const value = dataArray[index * step];
+                    const height = (value / 255) * 50 + 5; // Scale to 5-55px
+                    bar.style.height = `${height}px`;
+                });
+            } else {
+                // Reset to default when no audio
+                const heights = [20, 30, 25, 35, 20, 30, 25];
+                bars.forEach((bar, index) => {
+                    bar.style.height = `${heights[index]}px`;
+                });
+            }
+        }
+
+        async function connect() {
+            try {
+                log('Initializing audio context...', 'info');
+                updateStatus('connecting', 'Connecting...');
+
+                // Initialize AudioContext
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: SAMPLE_RATE
+                });
+
+                // Request microphone access
+                log('Requesting microphone access...', 'info');
+                mediaStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        sampleRate: SAMPLE_RATE,
+                        channelCount: 1,
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true
+                    }
+                });
+
+                // Create AudioWorklet for processing
+                await audioContext.audioWorklet.addModule('data:text/javascript,' + encodeURIComponent(`
+                    class AudioProcessor extends AudioWorkletProcessor {
+                        constructor() {
+                            super();
+                            this.buffer = [];
+                            this.chunkSize = ${CHUNK_SIZE};
+                        }
+
+                        process(inputs, outputs, parameters) {
+                            const input = inputs[0];
+                            if (input.length > 0) {
+                                const channelData = input[0];
+                                
+                                // Add to buffer
+                                for (let i = 0; i < channelData.length; i++) {
+                                    this.buffer.push(channelData[i]);
+                                }
+
+                                // Send chunks when buffer is large enough
+                                while (this.buffer.length >= this.chunkSize) {
+                                    const chunk = this.buffer.slice(0, this.chunkSize);
+                                    this.buffer = this.buffer.slice(this.chunkSize);
+                                    
+                                    // Convert Float32 to Int16
+                                    const int16Array = new Int16Array(chunk.length);
+                                    for (let i = 0; i < chunk.length; i++) {
+                                        const s = Math.max(-1, Math.min(1, chunk[i]));
+                                        int16Array[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+                                    }
+                                    
+                                    this.port.postMessage({
+                                        type: 'audio',
+                                        data: int16Array
+                                    });
+                                }
+
+                                // Send audio level for visualization
+                                const sum = channelData.reduce((a, b) => a + Math.abs(b), 0);
+                                const avg = sum / channelData.length;
+                                this.port.postMessage({
+                                    type: 'level',
+                                    level: avg
+                                });
+                            }
+                            return true;
+                        }
+                    }
+                    registerProcessor('audio-processor', AudioProcessor);
+                `));
+
+                // Create audio nodes
+                const source = audioContext.createMediaStreamSource(mediaStream);
+                audioWorkletNode = new AudioWorkletNode(audioContext, 'audio-processor');
+
+                // Connect audio nodes
+                source.connect(audioWorkletNode);
+
+                // Connect to WebSocket
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/mic-stream`;
+                
+                log(`Connecting to ${wsUrl}...`, 'info');
+                websocket = new WebSocket(wsUrl);
+
+                websocket.onopen = () => {
+                    log('WebSocket connected!', 'success');
+                    updateStatus('connected', 'Connected - Start speaking!');
+                    document.getElementById('connectBtn').disabled = true;
+                    document.getElementById('disconnectBtn').disabled = false;
+                };
+
+                websocket.onmessage = async (event) => {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'audio' && data.data) {
+                        // Decode base64 audio
+                        const audioData = atob(data.data);
+                        const int16Array = new Int16Array(audioData.length / 2);
+                        
+                        for (let i = 0; i < int16Array.length; i++) {
+                            const byte1 = audioData.charCodeAt(i * 2);
+                            const byte2 = audioData.charCodeAt(i * 2 + 1);
+                            int16Array[i] = (byte2 << 8) | byte1;
+                        }
+                        
+                        // Convert Int16 to Float32
+                        const float32Array = new Float32Array(int16Array.length);
+                        for (let i = 0; i < int16Array.length; i++) {
+                            float32Array[i] = int16Array[i] / (int16Array[i] < 0 ? 0x8000 : 0x7FFF);
+                        }
+                        
+                        // Schedule audio for playback with timing
+                        scheduleAudio(float32Array, data.item_id);
+                    } else if (data.type === 'response_start') {
+                        // New response starting - clear any previous audio
+                        console.log('New response starting:', data.item_id);
+                        stopAudioPlayback();
+                        currentItemId = data.item_id;
+                        responseStartTime = audioContext.currentTime;
+                        nextPlayTime = audioContext.currentTime;
+                    } else if (data.type === 'stop_audio') {
+                        // User interrupted - stop playback immediately
+                        console.log('Interruption detected - stopping audio at', data.audio_end_ms, 'ms');
+                        stopAudioPlayback();
+                    }
+                };
+
+                websocket.onerror = (error) => {
+                    log('WebSocket error: ' + error.message, 'error');
+                };
+
+                websocket.onclose = () => {
+                    log('WebSocket disconnected', 'warning');
+                    updateStatus('disconnected', 'Disconnected');
+                    document.getElementById('connectBtn').disabled = false;
+                    document.getElementById('disconnectBtn').disabled = true;
+                    updateVisualizer(null);
+                };
+
+                // Handle audio worklet messages
+                audioWorkletNode.port.onmessage = (event) => {
+                    if (event.data.type === 'audio' && websocket && websocket.readyState === WebSocket.OPEN) {
+                        // Convert Int16Array to base64
+                        const int16Array = event.data.data;
+                        const uint8Array = new Uint8Array(int16Array.buffer);
+                        const base64 = btoa(String.fromCharCode.apply(null, uint8Array));
+                        
+                        // Send to server
+                        websocket.send(JSON.stringify({
+                            type: 'audio',
+                            data: base64
+                        }));
+                    } else if (event.data.type === 'level') {
+                        // Update visualizer with audio level
+                        const level = event.data.level;
+                        const normalizedLevel = Math.min(255, level * 255 * 10);
+                        const dataArray = new Uint8Array(7).fill(normalizedLevel);
+                        updateVisualizer(dataArray);
+                    }
+                };
+
+            } catch (error) {
+                log('Error: ' + error.message, 'error');
+                updateStatus('disconnected', 'Error - Check console');
+                console.error(error);
+            }
+        }
+
+        function scheduleAudio(float32Data, itemId) {
+            /**
+             * Schedule audio for playback using Web Audio API timing.
+             * This allows precise tracking of playback position for interruption.
+             */
+            if (!audioContext) return;
+            
+            // Initialize timing for new response
+            if (itemId !== currentItemId) {
+                currentItemId = itemId;
+                responseStartTime = audioContext.currentTime;
+                nextPlayTime = audioContext.currentTime;
+            }
+            
+            // Create audio buffer
+            const buffer = audioContext.createBuffer(1, float32Data.length, SAMPLE_RATE);
+            buffer.getChannelData(0).set(float32Data);
+            
+            // Create and schedule source node
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            
+            // Track active source for interruption
+            activeSourceNodes.push(source);
+            
+            // Clean up when finished
+            source.onended = () => {
+                const index = activeSourceNodes.indexOf(source);
+                if (index > -1) {
+                    activeSourceNodes.splice(index, 1);
+                }
+            };
+            
+            // Schedule playback at precise time
+            source.start(nextPlayTime);
+            
+            // Update next play time
+            const durationSeconds = float32Data.length / SAMPLE_RATE;
+            nextPlayTime += durationSeconds;
+        }
+
+        function stopAudioPlayback() {
+            /**
+             * Stop all currently playing and scheduled audio.
+             * Called on interruption or when new response starts.
+             */
+            // Stop all active source nodes
+            activeSourceNodes.forEach(source => {
+                try {
+                    source.stop();
+                } catch (e) {
+                    // Source may have already finished
+                }
+            });
+            
+            // Clear tracking arrays
+            activeSourceNodes = [];
+            audioBufferQueue = [];
+            
+            // Reset timing
+            if (audioContext) {
+                nextPlayTime = audioContext.currentTime;
+            }
+            responseStartTime = null;
+            isPlaying = false;
+        }
+
+        async function playAudio() {
+            // Legacy function - now using scheduleAudio() instead
+            // Kept for compatibility but no longer used
+            if (isPlaying || audioBufferQueue.length === 0) {
+                return;
+            }
+
+            isPlaying = true;
+
+            while (audioBufferQueue.length > 0) {
+                const float32Data = audioBufferQueue.shift();
+                
+                // Create audio buffer
+                const audioBuffer = audioContext.createBuffer(1, float32Data.length, SAMPLE_RATE);
+                audioBuffer.getChannelData(0).set(float32Data);
+                
+                // Play audio
+                const source = audioContext.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(audioContext.destination);
+                
+                await new Promise((resolve) => {
+                    source.onended = resolve;
+                    source.start();
+                });
+            }
+
+            isPlaying = false;
+        }
+
+        function disconnect() {
+            log('Disconnecting...', 'info');
+            
+            // Stop any playing audio
+            stopAudioPlayback();
+            
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+            
+            if (audioWorkletNode) {
+                audioWorkletNode.disconnect();
+                audioWorkletNode = null;
+            }
+            
+            if (mediaStream) {
+                mediaStream.getTracks().forEach(track => track.stop());
+                mediaStream = null;
+            }
+            
+            if (audioContext) {
+                audioContext.close();
+                audioContext = null;
+            }
+
+            audioBufferQueue = [];
+            isPlaying = false;
+            currentItemId = null;
+            responseStartTime = null;
+            
+            updateStatus('disconnected', 'Disconnected');
+            document.getElementById('connectBtn').disabled = false;
+            document.getElementById('disconnectBtn').disabled = true;
+            updateVisualizer(null);
+        }
+
+        // Handle page unload
+        window.addEventListener('beforeunload', () => {
+            disconnect();
+        });
+
+        // Initial log
+        log('Ready to connect. Click the Connect button to start.', 'info');
+    </script>
+</body>
+</html>
